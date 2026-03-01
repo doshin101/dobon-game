@@ -95,11 +95,20 @@ class GameRenderer {
             const slot = document.getElementById(p.id === 0 ? 'you' : `cpu${p.id}`);
             if (!slot) return;
 
+            // ポイント更新
             slot.querySelector('.points').textContent = `${p.points}pts`;
 
-            // 手札枚数の表示
+            // CPU固有の描画
             if (p.isCpu) {
+                const info = slot.querySelector('.player-info');
                 const handMini = slot.querySelector('.hand-mini');
+
+                // 名前とポイントを縦に並べる
+                info.innerHTML = `
+                    <span class="name">${p.name}</span>
+                    <span class="points">${p.points}pts</span>
+                `;
+
                 handMini.innerHTML = '';
                 for (let i = 0; i < p.hand.length; i++) {
                     const cardBack = document.createElement('div');
