@@ -184,8 +184,8 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
-    margin-top: auto;
-    /* 下部に固定 */
+    margin-top: 25px;
+    /* 手札からの距離を広げる */
     padding-bottom: 5px;
 }
 

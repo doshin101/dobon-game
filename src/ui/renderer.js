@@ -157,14 +157,28 @@ class GameRenderer {
     toggleSelect(index) {
         if (this.game.currentPlayerIndex !== 0) return;
 
+        const player = this.game.players[0];
+        const targetCard = player.hand[index];
+
+        // 手札内に同じ数字のカードが他にもあるかチェック (単数/複数モードの分岐条件)
+        const sameRankCards = player.hand.filter(c => c.rank === targetCard.rank);
+
+        if (sameRankCards.length === 1) {
+            // 単数選択モード: 出せるなら即プレイ
+            if (this.game.canPlay(targetCard)) {
+                this.handlePlay([index]);
+            }
+            return;
+        }
+
+        // 複数選択モード: 選択状態をトグル
         const idx = this.selectedIndices.indexOf(index);
         if (idx > -1) {
             this.selectedIndices.splice(idx, 1);
         } else {
-            // 他のカードが選択されている場合、同じ数字かチェック
+            // 既に選択されているものがあれば、同じ数字かチェック
             if (this.selectedIndices.length > 0) {
-                const firstCard = this.game.players[0].hand[this.selectedIndices[0]];
-                const targetCard = this.game.players[0].hand[index];
+                const firstCard = player.hand[this.selectedIndices[0]];
                 if (firstCard.rank !== targetCard.rank) {
                     this.selectedIndices = [index]; // 違う数字なら選択を差し替え
                 } else {
@@ -193,15 +207,40 @@ class GameRenderer {
     }
 
     /**
-     * 操作ボタンの状態更新
+     * 操作ボタンの状態更新 (PlayRoute 準拠)
      */
     updateControls() {
         const isUserTurn = this.game.currentPlayerIndex === 0;
-        const playables = this.game.players[0].hand.filter(c => this.game.canPlay(c));
+        const player = this.game.players[0];
+        const playables = player.hand.filter(c => this.game.canPlay(c));
 
-        // ドロー、パス、ドボンの各ボタン制御（ロジックとの整合性は要調整）
-        this.elements.btnDraw.disabled = !isUserTurn || this.game.drawFlag;
-        this.elements.btnPass.disabled = !isUserTurn || !this.game.drawFlag;
+        // 初期表示を非表示に
+        this.elements.btnDraw.classList.add('hidden');
+        this.elements.btnPass.classList.add('hidden');
+
+        if (isUserTurn) {
+            if (this.selectedIndices.length > 0) {
+                // 複数選択中: PLAYボタンを表示（PASSボタンを再利用せず、専用の挙動へ）
+                const firstCard = player.hand[this.selectedIndices[0]];
+                if (this.game.canPlay(firstCard)) {
+                    this.elements.btnPass.textContent = "PLAY";
+                    this.elements.btnPass.classList.remove('hidden');
+                    this.elements.btnPass.disabled = false;
+                    this.elements.btnPass.onclick = () => this.handlePlay(this.selectedIndices);
+                }
+            } else if (playables.length === 0) {
+                // 出せるカードがない場合のみ DRAW/PASS を表示 (PlayRoute)
+                if (!this.game.drawFlag) {
+                    this.elements.btnDraw.classList.remove('hidden');
+                    this.elements.btnDraw.disabled = false;
+                } else {
+                    this.elements.btnPass.textContent = "PASS";
+                    this.elements.btnPass.classList.remove('hidden');
+                    this.elements.btnPass.disabled = false;
+                    this.elements.btnPass.onclick = () => this.handlePass();
+                }
+            }
+        }
 
         // ドボンボタン
         const canDbon = this.game.checkDbn(this.game.currentPlayerIndex).some(p => p.id === 0);
@@ -209,25 +248,6 @@ class GameRenderer {
             this.elements.btnDbon.classList.remove('hidden');
         } else {
             this.elements.btnDbon.classList.add('hidden');
-        }
-
-        // プレイボタンの代わりとしての「出したカードを決定」ロジック等が必要だが、
-        // 現状は選択された状態で「PLAY」ボタンが欲しいところ。
-        // MVP簡略化のため、選択された状態で再度クリックするか、専用ボタンを追加。
-        // ここでは「最後に選択したカードが場に出せるなら、PLAYボタンを出す」構成に。
-        if (isUserTurn && this.selectedIndices.length > 0) {
-            const firstCard = this.game.players[0].hand[this.selectedIndices[0]];
-            if (this.game.canPlay(firstCard)) {
-                this.elements.btnPass.textContent = "PLAY";
-                this.elements.btnPass.disabled = false;
-                this.elements.btnPass.onclick = () => this.handlePlay(this.selectedIndices);
-            } else {
-                this.elements.btnPass.textContent = "PASS";
-                this.elements.btnPass.onclick = () => this.handlePass();
-            }
-        } else {
-            this.elements.btnPass.textContent = "PASS";
-            this.elements.btnPass.onclick = () => this.handlePass();
         }
     }
 
