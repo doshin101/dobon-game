@@ -6,6 +6,7 @@ import { DobonGame } from '../logic/game.js';
 class GameRenderer {
     constructor() {
         this.game = new DobonGame();
+        this.selectedIndices = []; // 選択中のカードインデックス
         this.setupElements();
         this.setupEventListeners();
         this.init();
@@ -36,11 +37,43 @@ class GameRenderer {
     async init() {
         this.game.initGame();
         this.renderAll();
-        this.showAnnouncement(`SET ${this.game.setCount} START`);
+
+        // CheckStartフェーズのUI演出 (B04)
+        await this.handleStartCheckUI();
+
+        this.renderAll();
 
         // YOUのターンでなければCPUを動かす
-        if (this.game.players[this.game.currentPlayerIndex].isCpu) {
+        if (!this.game.isGameOver && this.game.players[this.game.currentPlayerIndex].isCpu) {
             this.processGameLoop();
+        }
+    }
+
+    /**
+     * セット開始時の特殊判定UI（ダブルリーチ等）
+     */
+    async handleStartCheckUI() {
+        const user = this.game.players[0];
+        const userSum = user.hand.reduce((s, c) => s + c.value, 0);
+
+        if (userSum <= 13) {
+            this.showAnnouncement("DOUBLE REACH CHANCE?");
+            // ダブルリーチボタンを活性化して3秒待機 (B04)
+            this.elements.btnDbon.textContent = "DOUBLE REACH";
+            this.elements.btnDbon.classList.remove('hidden');
+            this.elements.btnDbon.onclick = () => {
+                this.game.doubleReachFlags.add(0);
+                this.showAnnouncement("YOU: DOUBLE REACH!");
+                this.elements.btnDbon.classList.add('hidden');
+            };
+
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            this.elements.btnDbon.classList.add('hidden');
+            this.elements.btnDbon.onclick = () => this.handleDbon(); // 戻す
+            this.elements.btnDbon.textContent = "DOBON!";
+        } else {
+            this.showAnnouncement(`SET ${this.game.setCount} START`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
     }
 
@@ -101,9 +134,38 @@ class GameRenderer {
             }
 
             cardEl.innerHTML = `<span>${card.displayName}</span>`;
-            cardEl.addEventListener('click', () => this.handlePlay(index));
+
+            // 選択状態の表示
+            if (this.selectedIndices.includes(index)) {
+                cardEl.classList.add('selected');
+            }
+
+            cardEl.addEventListener('click', () => this.toggleSelect(index));
             this.elements.userHand.appendChild(cardEl);
         });
+    }
+
+    toggleSelect(index) {
+        if (this.game.currentPlayerIndex !== 0) return;
+
+        const idx = this.selectedIndices.indexOf(index);
+        if (idx > -1) {
+            this.selectedIndices.splice(idx, 1);
+        } else {
+            // 他のカードが選択されている場合、同じ数字かチェック
+            if (this.selectedIndices.length > 0) {
+                const firstCard = this.game.players[0].hand[this.selectedIndices[0]];
+                const targetCard = this.game.players[0].hand[index];
+                if (firstCard.rank !== targetCard.rank) {
+                    this.selectedIndices = [index]; // 違う数字なら選択を差し替え
+                } else {
+                    this.selectedIndices.push(index);
+                }
+            } else {
+                this.selectedIndices.push(index);
+            }
+        }
+        this.renderAll();
     }
 
     /**
@@ -139,6 +201,25 @@ class GameRenderer {
         } else {
             this.elements.btnDbon.classList.add('hidden');
         }
+
+        // プレイボタンの代わりとしての「出したカードを決定」ロジック等が必要だが、
+        // 現状は選択された状態で「PLAY」ボタンが欲しいところ。
+        // MVP簡略化のため、選択された状態で再度クリックするか、専用ボタンを追加。
+        // ここでは「最後に選択したカードが場に出せるなら、PLAYボタンを出す」構成に。
+        if (isUserTurn && this.selectedIndices.length > 0) {
+            const firstCard = this.game.players[0].hand[this.selectedIndices[0]];
+            if (this.game.canPlay(firstCard)) {
+                this.elements.btnPass.textContent = "PLAY";
+                this.elements.btnPass.disabled = false;
+                this.elements.btnPass.onclick = () => this.handlePlay(this.selectedIndices);
+            } else {
+                this.elements.btnPass.textContent = "PASS";
+                this.elements.btnPass.onclick = () => this.handlePass();
+            }
+        } else {
+            this.elements.btnPass.textContent = "PASS";
+            this.elements.btnPass.onclick = () => this.handlePass();
+        }
     }
 
     getCardColor(suit) {
@@ -159,12 +240,10 @@ class GameRenderer {
 
     /* --- Event Handlers --- */
 
-    handlePlay(index) {
+    handlePlay(indices) {
         if (this.game.currentPlayerIndex !== 0) return;
-        const card = this.game.players[0].hand[index];
-        if (!this.game.canPlay(card)) return;
-
-        this.game.playCard(index);
+        this.game.playCard(indices);
+        this.selectedIndices = [];
         this.renderAll();
         this.processGameLoop();
     }

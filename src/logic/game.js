@@ -19,6 +19,9 @@ export class DobonGame {
         this.setCount = 1;     // セット数
         this.isGameOver = false;
         this.drawFlag = false; // そのターンにドローしたか
+        this.multiplier = 1;   // セットの倍率
+        this.doubleReachFlags = new Set(); // ダブルリーチを宣言したプレイヤーID
+        this.reachFlags = new Set();       // リーチを宣言したプレイヤーID
     }
 
     /**
@@ -38,15 +41,52 @@ export class DobonGame {
     /**
      * セットの開始 (Phase 1: SetStart相当)
      */
-    startSet() {
+    async startSet() {
         console.log(`--- Set ${this.setCount} Start ---`);
+        this.multiplier = 1;
+        this.doubleReachFlags.clear();
+        this.reachFlags.clear();
+
         this.createDeck();
         this.shuffleDeck();
         this.dealCards();
-        this.setInitialTopCard(); // 最初の場札をセット
-        this.currentPlayerIndex = (this.dealerIndex + 1) % this.players.length; // 親の次から開始
 
-        this.logGameState();
+        await this.startCheck(); // Phase 1: CheckStart相当 (B00)
+    }
+
+    /**
+     * ターン開始前のチェック (B00)
+     */
+    async startCheck() {
+        console.log('--- Start Check (B00) ---');
+
+        // 全プレイヤーの手札合計値をチェック (B01)
+        const atMost13Players = this.players.filter(p => {
+            const sum = p.hand.reduce((s, c) => s + c.value, 0);
+            return sum <= 13;
+        });
+
+        // 場札をセット (B02)
+        this.setInitialTopCard();
+
+        // 初ドボン（ショドボン）チェック (B09)
+        const winners = this.checkDbn(-1); // 誰も出してないので-1
+        if (winners.length > 0) {
+            this.resolveFirstDbn(winners);
+        } else {
+            // ターン開始準備 (B08)
+            this.currentPlayerIndex = (this.dealerIndex + 1) % this.players.length;
+            this.logGameState();
+        }
+    }
+
+    /**
+     * 初ドボン（ショドボン）の決着 (B12-B17)
+     */
+    resolveFirstDbn(winners) {
+        console.log(`!!! FIRST DOBON (SHODOBON) !!!`);
+        // 本来はここで詳細な報酬計算 (Reward) へ
+        this.isGameOver = true;
     }
 
     /**
@@ -105,14 +145,35 @@ export class DobonGame {
 
     /**
      * カードを出す (J09)
-     * @param {number} cardIndex 
+     * @param {number[]} cardIndices - 出すカードのインデックス配列（複数枚出し対応）
      */
-    playCard(cardIndex) {
+    playCard(cardIndices) {
+        if (!Array.isArray(cardIndices)) cardIndices = [cardIndices];
         const player = this.players[this.currentPlayerIndex];
-        const card = player.hand.splice(cardIndex, 1)[0];
-        this.topCard = card;
-        this.discardPile.push(card);
-        console.log(`${player.name} played ${card.displayName}.`);
+
+        // 複数枚出しの妥当性チェック (checkHandSet相当)
+        if (cardIndices.length > 1) {
+            const ranks = cardIndices.map(i => player.hand[i].rank);
+            if (!ranks.every(r => r === ranks[0])) {
+                console.log("Invalid multiple play: Ranks must match.");
+                return;
+            }
+        }
+
+        // カードを移動
+        const playedCards = [];
+        // インデックスがずれないよう、降順で削除
+        cardIndices.sort((a, b) => b - a).forEach(index => {
+            playedCards.push(player.hand.splice(index, 1)[0]);
+        });
+
+        const lastCard = playedCards[0]; // 最後に重なるカード
+        this.topCard = lastCard;
+        this.discardPile.push(...playedCards);
+        console.log(`${player.name} played ${playedCards.map(c => c.displayName).join(', ')}.`);
+
+        // リーチ宣言のチェック (I03)
+        this.checkReach(player);
 
         // Phase 3: ドボン判定 (J10)
         const winners = this.checkDbn(player.id);
@@ -124,39 +185,86 @@ export class DobonGame {
     }
 
     /**
+     * リーチ宣言のチェック (I03)
+     */
+    checkReach(player) {
+        const sum = player.hand.reduce((s, c) => s + c.value, 0);
+        if (sum <= 13) {
+            this.reachFlags.add(player.id);
+            console.log(`${player.name} declared Reach!`);
+        } else {
+            // 合計が13を超えたらリーチ解除 (Release)
+            this.reachFlags.delete(player.id);
+        }
+    }
+
+    /**
      * ドボン判定 (J10)
-     * カードを出したプレイヤー以外の手札合計をチェック
-     * @param {number} actorId - カードを出したプレイヤーのID
+     * @param {number} actorId - カードを出したプレイヤーのID (-1は初回場札)
      * @returns {Object[]} 勝利プレイヤーリスト
      */
     checkDbn(actorId) {
         const winners = [];
-        this.players.forEach(p => {
-            if (p.id === actorId) return; // 出した本人は除外
+        const targetValue = this.topCard.value;
 
+        this.players.forEach(p => {
+            // ドボン返し (K05): 出した本人も手札合計が一致すればドボン返し可能
+            const isActor = (p.id === actorId);
             const handSum = p.hand.reduce((sum, c) => sum + c.value, 0);
-            if (handSum === this.topCard.value) {
-                winners.push(p);
+
+            if (handSum === targetValue) {
+                winners.push({
+                    player: p,
+                    isCounter: isActor,
+                    multiplier: this.calculateMultiplier(p)
+                });
             }
         });
         return winners;
     }
 
     /**
-     * ドボン成立時の処理 (K13/Reward相当)
-     * @param {Object[]} winners 
-     * @param {number} loserId 
+     * プレイヤーの現在の倍率を計算 (L03, B19等)
      */
-    resolveDbn(winners, loserId) {
-        const loser = this.players[loserId];
-        const winnerNames = winners.map(w => w.name).join(', ');
-        console.log(`!!! DOBON !!! Winner(s): ${winnerNames}, Loser: ${loser.name}`);
+    calculateMultiplier(player) {
+        let m = this.multiplier;
+        if (this.doubleReachFlags.has(player.id)) m *= 2;
+        if (this.reachFlags.has(player.id)) m *= 1;
+        return m;
+    }
 
-        // MVP: シンプルな勝利確定
+    /**
+     * ドボン成立時の処理 (K13/Reward相当)
+     */
+    resolveDbn(winnerObjects, loserId) {
+        console.log(`!!! DOBON RESOLVED !!!`);
+        const basePoints = 1000; // 基本点 (MVP用)
+        const loser = loserId !== -1 ? this.players[loserId] : null;
+
+        winnerObjects.forEach(w => {
+            const winner = w.player;
+            const points = basePoints * w.multiplier;
+            console.log(`Winner: ${winner.name} (Multiplier: x${w.multiplier}, Points: ${points})`);
+
+            // ポイント移動 (B18 / Reward)
+            this.transferPoints(winner.id, loserId, points);
+        });
+
         this.isGameOver = true;
+    }
 
-        // 将来的にはここでポイント移動 (Reward) を行う
-        // 現在はとりあえずコンソール表示のみ
+    /**
+     * ポイントの移動 (B18 / TransferPoints)
+     */
+    transferPoints(winnerId, loserId, points) {
+        const winner = this.players[winnerId];
+        winner.points += points;
+
+        if (loserId !== -1) {
+            const loser = this.players[loserId];
+            loser.points -= points;
+            if (loser.points < 0) loser.points = 0;
+        }
     }
 
     /**
