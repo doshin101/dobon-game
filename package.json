@@ -1,0 +1,10 @@
+{
+  "name": "dbn-web-mvp",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Dobon Card Game MVP",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  }
+}

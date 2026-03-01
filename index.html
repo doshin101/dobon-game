@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DOBON - Premium Card Game</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app" class="game-container">
+        <!-- Opponents Area -->
+        <div class="opponents-area">
+            <div id="cpu2" class="player-slot cpu top">
+                <div class="player-info">
+                    <span class="name">CPU 2</span>
+                    <span class="points">6000pts</span>
+                </div>
+                <div class="hand-mini" data-count="3"></div>
+            </div>
+            
+            <div class="sides">
+                <div id="cpu1" class="player-slot cpu left">
+                    <div class="player-info">
+                        <span class="name">CPU 1</span>
+                        <span class="points">6000pts</span>
+                    </div>
+                    <div class="hand-mini vertical" data-count="3"></div>
+                </div>
+                
+                <div id="cpu3" class="player-slot cpu right">
+                    <div class="player-info">
+                        <span class="name">CPU 3</span>
+                        <span class="points">6000pts</span>
+                    </div>
+                    <div class="hand-mini vertical" data-count="3"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Table -->
+        <div class="table-area">
+            <div id="stock" class="card-deck stock">
+                <div class="card-back"></div>
+                <span class="count">40</span>
+            </div>
+            
+            <div id="discard" class="card-deck discard">
+                <!-- Top card will be rendered here -->
+            </div>
+        </div>
+
+        <!-- Player Area -->
+        <div class="user-area">
+            <div id="you" class="player-slot user">
+                <div class="player-info">
+                    <span class="name">YOU</span>
+                    <span class="points">6000pts</span>
+                </div>
+                <div id="user-hand" class="hand-main">
+                    <!-- User cards here -->
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button id="btn-draw" class="game-btn primary" disabled>DRAW</button>
+                <button id="btn-pass" class="game-btn secondary" disabled>PASS</button>
+                <button id="btn-dbon" class="game-btn dbon-btn hidden">DOBON!</button>
+            </div>
+        </div>
+
+        <!-- Effects & Overlays -->
+        <div id="announcement" class="announcement hidden">SET 1 START</div>
+    </div>
+
+    <script type="module" src="src/ui/renderer.js"></script>
+</body>
+</html>
