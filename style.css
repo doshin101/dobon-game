@@ -134,18 +134,26 @@ body {
     border: 2px solid white;
 }
 
-.stock .count {
-    position: absolute;
-    bottom: -20px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 0.8rem;
+.discard-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.card-owner {
+    font-size: 0.7rem;
     font-weight: 600;
+    color: #94a3b8;
+    height: 1rem;
 }
 
 .discard {
     background: rgba(255, 255, 255, 0.1);
     border: 2px dashed rgba(255, 255, 255, 0.2);
+    width: 60px;
+    /* 山札と統一 */
+    height: 85px;
 }
 
 /* Cards */
@@ -185,8 +193,15 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     margin-top: 25px;
-    /* 手札からの距離を広げる */
+    min-height: 100px;
+    /* スペースを固定してガタつきを防止 */
     padding-bottom: 5px;
+    position: relative;
+}
+
+.game-btn.hidden {
+    visibility: hidden !important;
+    display: block !important;
 }
 
 .game-btn {
@@ -197,6 +212,8 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: opacity 0.2s;
+    height: 44px;
+    /* ボタンの高さを固定 */
 }
 
 .game-btn:disabled {

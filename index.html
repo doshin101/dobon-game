@@ -47,8 +47,11 @@
                 <span class="count">40</span>
             </div>
 
-            <div id="discard" class="card-deck discard">
-                <!-- Top card will be rendered here -->
+            <div class="discard-container">
+                <div id="discard" class="card-deck discard">
+                    <!-- Top card will be rendered here -->
+                </div>
+                <div id="discard-owner" class="card-owner">First</div>
             </div>
         </div>
 
@@ -73,6 +76,21 @@
 
         <!-- Effects & Overlays -->
         <div id="announcement" class="announcement hidden">SET 1 START</div>
+
+        <!-- Reward Modal -->
+        <div id="reward-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <h2>SET RESULT</h2>
+                <div id="winner-display" class="result-box winner">
+                    <span class="label">WINNER</span>
+                    <span class="name">-</span>
+                </div>
+                <div id="reward-details" class="reward-list">
+                    <!-- Reward details will be injected here -->
+                </div>
+                <button id="btn-next-set" class="game-btn primary">NEXT SET</button>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="src/ui/renderer.js"></script>

@@ -24,7 +24,10 @@ class GameRenderer {
             announcement: document.getElementById('announcement'),
             btnDraw: document.getElementById('btn-draw'),
             btnPass: document.getElementById('btn-pass'),
-            btnDbon: document.getElementById('btn-dbon')
+            btnDbon: document.getElementById('btn-dbon'),
+            discardOwner: document.getElementById('discard-owner'),
+            rewardModal: document.getElementById('reward-modal'),
+            btnNextSet: document.getElementById('btn-next-set')
         };
     }
 
@@ -32,6 +35,7 @@ class GameRenderer {
         this.elements.btnDraw.addEventListener('click', () => this.handleDraw());
         this.elements.btnPass.addEventListener('click', () => this.handlePass());
         this.elements.btnDbon.addEventListener('click', () => this.handleDbon());
+        this.elements.btnNextSet.addEventListener('click', () => this.handleNextSet());
     }
 
     async init() {
@@ -203,6 +207,11 @@ class GameRenderer {
             topCardEl.className = `card ${this.getCardColor(this.game.topCard.suit)}`;
             topCardEl.innerHTML = `<span>${this.game.topCard.displayName}</span>`;
             this.elements.discardPile.appendChild(topCardEl);
+
+            // 出し手を表示
+            const ownerId = this.game.lastPlayerId;
+            const ownerName = ownerId === -1 ? "First" : this.game.players[ownerId].name;
+            this.elements.discardOwner.textContent = ownerName;
         }
     }
 
@@ -213,14 +222,46 @@ class GameRenderer {
         const isUserTurn = this.game.currentPlayerIndex === 0;
         const player = this.game.players[0];
         const playables = player.hand.filter(c => this.game.canPlay(c));
+        const handSum = player.hand.reduce((s, c) => s + c.value, 0);
 
-        // 初期表示を非表示に
+        // 各ボタンの初期表示設定 (hiddenクラスで visibility: hidden になる)
         this.elements.btnDraw.classList.add('hidden');
         this.elements.btnPass.classList.add('hidden');
 
-        if (isUserTurn) {
+        // REACHボタンの動的管理
+        let reachBtn = document.getElementById('btn-reach');
+        if (!reachBtn) {
+            reachBtn = document.createElement('button');
+            reachBtn.id = 'btn-reach';
+            reachBtn.className = 'game-btn reach-btn hidden';
+            reachBtn.textContent = 'REACH!';
+            this.elements.btnDraw.parentElement.prepend(reachBtn);
+        }
+        reachBtn.classList.add('hidden');
+
+        if (isUserTurn && !this.game.isGameOver) {
+            // 手札1枚時の強制ドロー (ターン開始時)
+            if (player.hand.length === 1 && !this.game.drawFlag) {
+                this.elements.btnDraw.textContent = "FORCED DRAW";
+                this.elements.btnDraw.classList.remove('hidden');
+                this.elements.btnDraw.disabled = false;
+                return;
+            } else {
+                this.elements.btnDraw.textContent = "DRAW";
+            }
+
+            // REACHボタン表示条件
+            if (handSum <= 13 && !this.game.reachFlags.has(0)) {
+                reachBtn.classList.remove('hidden');
+                reachBtn.onclick = () => {
+                    this.game.reachFlags.add(0);
+                    this.showAnnouncement("YOU: REACH!");
+                    this.renderAll();
+                };
+            }
+
             if (this.selectedIndices.length > 0) {
-                // 複数選択中: PLAYボタンを表示（PASSボタンを再利用せず、専用の挙動へ）
+                // 複数選択中
                 const firstCard = player.hand[this.selectedIndices[0]];
                 if (this.game.canPlay(firstCard)) {
                     this.elements.btnPass.textContent = "PLAY";
@@ -229,7 +270,7 @@ class GameRenderer {
                     this.elements.btnPass.onclick = () => this.handlePlay(this.selectedIndices);
                 }
             } else if (playables.length === 0) {
-                // 出せるカードがない場合のみ DRAW/PASS を表示 (PlayRoute)
+                // 出せるカードがない場合のみ表示
                 if (!this.game.drawFlag) {
                     this.elements.btnDraw.classList.remove('hidden');
                     this.elements.btnDraw.disabled = false;
@@ -298,21 +339,72 @@ class GameRenderer {
     }
 
     /**
-     * CPU操作を含むゲームの進行ループ（簡易版）
+     * CPU操作を含むゲームの進行ループ
      */
     async processGameLoop() {
-        if (this.game.isGameOver) return;
+        if (this.game.isGameOver) {
+            this.showRewardModal();
+            return;
+        }
 
         while (this.game.players[this.game.currentPlayerIndex].isCpu && !this.game.isGameOver) {
+            const cpu = this.game.players[this.game.currentPlayerIndex];
+
+            // ターン開始時の強制ドロー (CPU)
+            if (cpu.hand.length === 1 && !this.game.drawFlag) {
+                console.log(`CPU ${cpu.id} forced draw.`);
+                this.game.drawCard();
+                this.renderAll();
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
             // CPUの思考時間演出
             await new Promise(resolve => setTimeout(resolve, 1500));
             this.game.processCpuTurn();
             this.renderAll();
 
             if (this.game.isGameOver) {
-                this.showAnnouncement(`${this.game.players[this.game.currentPlayerIndex].name} WINS!`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                this.showRewardModal();
                 break;
             }
+        }
+    }
+
+    showRewardModal() {
+        const modal = this.elements.rewardModal;
+        const winner = this.game.winners[0]; // 簡易的に最初の勝者を表示
+
+        modal.querySelector('#winner-display .name').textContent = winner ? winner.name : "DRAW";
+
+        const details = modal.querySelector('#reward-details');
+        details.innerHTML = '';
+
+        this.game.players.forEach(p => {
+            const isWinner = winner && p.id === winner.id;
+            const item = document.createElement('div');
+            item.className = `reward-item ${isWinner ? 'plus' : 'minus'}`;
+
+            // ポイント移動の詳細はMVP版の簡易ロジック結果を表示
+            item.innerHTML = `
+                <span>${p.name}</span>
+                <span class="pts">${p.points} pts</span>
+            `;
+            details.appendChild(item);
+        });
+
+        modal.classList.remove('hidden');
+    }
+
+    handleNextSet() {
+        this.elements.rewardModal.classList.add('hidden');
+        this.game.setCount++;
+        this.game.startSet();
+        this.renderAll();
+
+        // YOUのターンでなければCPUを動かす
+        if (!this.game.isGameOver && this.game.players[this.game.currentPlayerIndex].isCpu) {
+            this.processGameLoop();
         }
     }
 }

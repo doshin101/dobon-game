@@ -22,6 +22,8 @@ export class DobonGame {
         this.multiplier = 1;   // セットの倍率
         this.doubleReachFlags = new Set(); // ダブルリーチを宣言したプレイヤーID
         this.reachFlags = new Set();       // リーチを宣言したプレイヤーID
+        this.lastPlayerId = -1; // 場札を最後に出したプレイヤーID (-1はFirst)
+        this.winners = [];      // セットの勝者リスト
     }
 
     /**
@@ -95,6 +97,7 @@ export class DobonGame {
     setInitialTopCard() {
         this.topCard = this.stock.pop();
         this.discardPile.push(this.topCard);
+        this.lastPlayerId = -1; // First
         console.log(`Initial Top Card: ${this.topCard.displayName}`);
     }
 
@@ -170,6 +173,7 @@ export class DobonGame {
         const lastCard = playedCards[0]; // 最後に重なるカード
         this.topCard = lastCard;
         this.discardPile.push(...playedCards);
+        this.lastPlayerId = player.id;
         console.log(`${player.name} played ${playedCards.map(c => c.displayName).join(', ')}.`);
 
         // リーチ宣言のチェック (I03)
@@ -239,15 +243,19 @@ export class DobonGame {
     resolveDbn(winnerObjects, loserId) {
         console.log(`!!! DOBON RESOLVED !!!`);
         const basePoints = 1000; // 基本点 (MVP用)
-        const loser = loserId !== -1 ? this.players[loserId] : null;
-
-        winnerObjects.forEach(w => {
-            const winner = w.player;
+        this.winners = winnerObjects.map(w => {
             const points = basePoints * w.multiplier;
-            console.log(`Winner: ${winner.name} (Multiplier: x${w.multiplier}, Points: ${points})`);
+            return {
+                id: w.player.id,
+                name: w.player.name,
+                points: points,
+                multiplier: w.multiplier
+            };
+        });
 
+        this.winners.forEach(w => {
             // ポイント移動 (B18 / Reward)
-            this.transferPoints(winner.id, loserId, points);
+            this.transferPoints(w.id, loserId, w.points);
         });
 
         this.isGameOver = true;
@@ -282,15 +290,13 @@ export class DobonGame {
     endTurn() {
         const player = this.players[this.currentPlayerIndex];
 
-        // MVP: 手札が1枚なら強制ドロー (F02/G01相当)
-        if (player.hand.length === 1 && !this.drawFlag) {
-            console.log(`${player.name} has only 1 card. Forced draw.`);
-            this.drawCard();
-        }
+        // カードを出した後の自動ドローを削除 (ユーザー要望)
 
         if (player.hand.length === 0) {
             console.log(`${player.name} wins! (Hand empty - tentative)`);
             this.isGameOver = true;
+            // 上がり（ドボンでない勝利）の場合も winners をセット
+            this.winners = [{ id: player.id, name: player.name, points: 1000, multiplier: 1 }];
             return;
         }
 
